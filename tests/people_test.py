@@ -1,115 +1,69 @@
-import requests
+# import pytest
+# import requests
 import json
 from uuid import uuid4
 
-from config import BASE_URI
+from clients.people_client import PeopleClient
 from utils.print_helpers import pretty_print
 
-def test_get_read_all_contains_kent():
-    # call requests.get() to return a list of people
-    people = get_all_people()
-    # list comprehension to make a list of firstnames
+client = PeopleClient()   
+
+
+def test_get_read_all_containing_kent():
+    response = client.get_all_people()
+    people = response.as_json
+
+    assert response.status_code ==200
     first_names = [person['fname'] for person in people]
     assert 'Kent' in first_names
 
 
 def test_get_person_kent():
-    person = get_person_by_id(2)
-    assert person['lname'] == "Brockman"
+    response = client.get_person_by_id(2)
+
+    assert response.status_code == 200
+    assert response.as_json['lname'] == 'Brockman'
 
 
 def test_delete_person(create_data):
-    person = create_unique_person(create_data)
-    pid_unique = person['person_id']
 
-    response = requests.delete(f"{BASE_URI}/{pid_unique}")
+    client.create_person(create_data)
+
+    pid = client.get_pid_by_lname(create_data['lname'])
+    response = client.delete_person(pid)
+    assert response.status_code == 200
+    
+    response_get = client.get_person_by_id(pid)
+    assert response_get.status_code ==404         
+       
+
+def test_create_person(create_data):
+    person_count = len(client.get_all_people().as_json)
+    response = client.create_person(create_data)
+    person_count_after = len(client.get_all_people().as_json)
+
+    assert person_count_after == person_count + 1   
+    assert response.status_code == 204
+
+    pid = client.get_pid_by_lname(create_data['lname'])
+    response = client.delete_person(pid)
     assert response.status_code == 200
 
 
-def test_create_person(create_data):
-    count_before = len(get_all_people())
-    person = create_unique_person(create_data)
-    pid = person['person_id']
-    count_after = len(get_all_people())
-
-    assert count_after == count_before + 1   
-
-    requests.delete(f"{BASE_URI}/{pid}")
-
-
 def test_update_person(create_data):
-    person = create_unique_person(create_data)
-    pid = person['person_id']
+    client.create_person(create_data)
+    pid = client.get_pid_by_lname(create_data['lname'])
 
     payload = json.dumps({
         "fname": "Moses",
         "lname": "Sumney"
     })
 
-    headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    }
-
-    response = requests.put(f"{BASE_URI}/{pid}", headers=headers, data=payload) 
-    response.status_code == 200
-    requests.delete(f"{BASE_URI}/{pid}")
-
-    
-
-
-def create_unique_person(body = None):
-    
-    if body == None:
-        lname = f"lname {str(uuid4())}"
-        payload = json.dumps({
-            'fname': 'default',
-            'lname': lname
-        })
-    else:
-        lname = body['lname']
-        payload = json.dumps(body)
-    
-    headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    }
-
-    response = requests.post(BASE_URI, headers=headers, data=payload)
-    assert response.status_code == 204
-    unique_person = get_person_by_lname(lname)
-    return unique_person
-
-# def create_unique_person(fname = 'Firsty', lname = 'User'):
-#     unique_fname, unique_lname = f"{fname} {str(uuid4())}", f"{lname} {str(uuid4())}"
-
-#     payload = json.dumps({
-#         'fname': unique_fname,
-#         'lname': unique_lname
-#     })
-    
-#     headers = {
-#         'Content-Type': 'application/json',
-#         'Accept': 'application/json'
-#     }
-
-#     response = requests.post(BASE_URI, headers=headers, data=payload)
-#     assert response.status_code == 204
-#     unique_person = get_person_by_lname(unique_lname)
-#     return unique_person
-
-def get_all_people():
-    response = requests.get(BASE_URI)
-    people = response.json()
+    response = client.update_person(pid, payload)
     assert response.status_code == 200
-    return people
+    new_pid = client.get_pid_by_lname('Sumney')
+    client.delete_person(new_pid)
 
-def get_person_by_lname(lname):
-    people = requests.get(BASE_URI).json()
-    match_person = [person for person in people if person['lname'] == lname]
-    return match_person[0]
+
+# def test_update_with_existing_person():
     
-def get_person_by_id(person_id):
-    response = requests.get(f"{BASE_URI}/{person_id}")
-    assert response.status_code == 200
-    return response.json()

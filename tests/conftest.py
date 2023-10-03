@@ -1,10 +1,6 @@
 import pytest, json
 from uuid import uuid4
-
 from pathlib import Path
-
-# import create_person
-
 
 @pytest.fixture
 def create_data():
